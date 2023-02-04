@@ -1,0 +1,10 @@
+[package]
+name = "suipad"
+version = "0.0.1"
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework", rev = "devnet" }
+
+[addresses]
+suipad =  "0xd11105fd1760d82f7592e3c78ab89ece128b378a"
+sui =  "0x2"
