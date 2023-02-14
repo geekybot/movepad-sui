@@ -58,7 +58,7 @@ module suipad::token_sale_v1 {
         user_map: Table<address, ID>
     }
 
-    struct WithdrawbleToken has key {
+    struct WithdrawbleToken has key, store {
         id: UID,
         sale_id: ID,
         base_token_amount: u64,
@@ -168,17 +168,43 @@ module suipad::token_sale_v1 {
     }
 
 
-    public entry fun claim_token<CoinType>(presale: &mut PresaleInfo<CoinType>, user_claim: &mut WithdrawbleToken, ctx: &mut TxContext) {
+    public entry fun claim_token<CoinType>(presale: &mut PresaleInfo<CoinType>, user_claim: WithdrawbleToken, ctx: &mut TxContext) {
         assert!(presale.sale_status == 3 , ERR_PRESALE_IS_NOT_COMPLETED);
         let user_addr = tx_context::sender(ctx);
         assert!(table::contains(&presale.user_map, user_addr), ERR_USER_CLAIMABLE_TOKEN_NOT_FOUND);
         let token = coin::take(&mut presale.coin_reserve, user_claim.withdrawable_token_amount, ctx);
+        let WithdrawbleToken {id, sale_id: _, base_token_amount: _, withdrawable_token_amount: _ } = user_claim;
+        //remove from table entry, consume the withdrawable object
+        table::remove(&mut presale.user_map, user_addr);
+        object::delete(id);
         transfer::transfer(token, tx_context::sender(ctx));
-        // coin::transfer<CoinType>(&resource_signer, signer::address_of(sender), user_claim.withdrawable_token_amount);
-        // presale.coin_reserve = presale.coin_reserve - user_claim.withdrawable_token_amount;
     }
 
+    public entry fun admin_withdraw_from_presale<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, ctx: &mut TxContext) {
+        assert!(presale.sale_status == 3 || presale.sale_status == 4 , ERR_PRESALE_IS_NOT_COMPLETED);
+        let remaining_coin = balance::value(&presale.coin_reserve);
+        let coins = coin::take(&mut presale.coin_reserve, remaining_coin, ctx);
+        transfer::transfer(coins, tx_context::sender(ctx));
 
+        let remaining_sui = balance::value(&presale.sui_reserve);
+        let sui_out = coin::take(&mut presale.sui_reserve, remaining_sui, ctx);
+        transfer::transfer(sui_out, tx_context::sender(ctx));
+    }
 
+    public entry fun change_sale_status<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, status: u64, ctx: &mut TxContext) {
+        presale.sale_status = status;
+    }
 
+    public entry fun enable_disable_whitelist<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, status: bool, ctx: &mut TxContext) {
+        presale.is_whitelist = status;
+    }
+
+    public entry fun update_max_spend_limit<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, limit: u64, ctx: &mut TxContext) {
+        presale.max_spend_per_user = limit;
+    }
+    
+    public entry fun add_to_whitelist<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, list: vector<address>, ctx: &mut TxContext) {
+        assert!(presale.sale_status == 1, ERR_SALE_IS_NOT_IN_UPCOMING_STATE);
+        vector::append(&mut presale.whitelist, list);
+    }
 }
