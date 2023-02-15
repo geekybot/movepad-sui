@@ -1,16 +1,10 @@
 module suipad::token_sale_v1 {
     use sui::tx_context::{Self, TxContext};
-    // use std::error;
     use std::vector;
-    use std::option::{Self, Option};
-    // use std::account;
-    // use std::debug;
-
     use sui::object::{Self, UID, ID};
     use sui::sui::SUI;
     use sui::balance::{Self, Balance};
     use sui::transfer;
-    use std::string::{Self, String};
     use sui::coin::{Self, Coin};
     use sui::table::{Self, Table};
 
@@ -207,4 +201,12 @@ module suipad::token_sale_v1 {
         assert!(presale.sale_status == 1, ERR_SALE_IS_NOT_IN_UPCOMING_STATE);
         vector::append(&mut presale.whitelist, list);
     }
+}
+
+module suipad::token_sale_test {
+    use sui::sui::SUI;
+    use sui::coin::{mint_for_testing as mint, destroy_for_testing as burn};
+    use sui::test_scenario::{Self as test, Scenario, next_tx, ctx}
+    ;
+    // use suipad::token_sale_v1::{Self, AdminCap, PresaleInfo, WithdrawbleToken};
 }
