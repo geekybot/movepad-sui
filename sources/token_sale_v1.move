@@ -185,28 +185,182 @@ module suipad::token_sale_v1 {
         transfer::transfer(sui_out, tx_context::sender(ctx));
     }
 
-    public entry fun change_sale_status<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, status: u64, ctx: &mut TxContext) {
+    public entry fun change_sale_status<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, status: u64, _ctx: &mut TxContext) {
         presale.sale_status = status;
     }
 
-    public entry fun enable_disable_whitelist<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, status: bool, ctx: &mut TxContext) {
+    public entry fun enable_disable_whitelist<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, status: bool, _ctx: &mut TxContext) {
         presale.is_whitelist = status;
     }
 
-    public entry fun update_max_spend_limit<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, limit: u64, ctx: &mut TxContext) {
+    public entry fun update_max_spend_limit<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, limit: u64, _ctx: &mut TxContext) {
         presale.max_spend_per_user = limit;
     }
     
-    public entry fun add_to_whitelist<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, list: vector<address>, ctx: &mut TxContext) {
+    public entry fun add_to_whitelist<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, list: vector<address>, _ctx: &mut TxContext) {
         assert!(presale.sale_status == 1, ERR_SALE_IS_NOT_IN_UPCOMING_STATE);
         vector::append(&mut presale.whitelist, list);
     }
+
+    //getters
+    // public fun profits(grocery: &Grocery): u64 {
+    //     balance::value(&grocery.profits)
+    // }
+    //returns min_spend, max_spend, amount_to_be_raised, amount raised so far, token_to_be_sold, softcap
+    public fun get_presale_token_details<CoinType>(presale: &PresaleInfo<CoinType>): (u64, u64, u64, u64, u64, u64){
+        (presale.min_spend_per_user, presale.max_spend_per_user, presale.amount_to_be_raised, presale.amount_raised, presale.token_to_be_sold, presale.softcap)
+    }
+
+    //returns sale_start ts, sale end ts, token distribution time, sale status
+    public fun get_presale_time_details<CoinType>(presale: &PresaleInfo<CoinType>): (u64, u64, u64, u64) {
+        (presale.sale_start_ts, presale.sale_end_ts, presale.token_distribution_ts, presale.sale_status)
+    }
+
+    // returns whitelist and participant numbers
+    public fun get_presale_whitelist_numbers<CoinType>(presale: &PresaleInfo<CoinType>): (u64, u64) {
+        (vector::length(&presale.whitelist), presale.participated)
+    }
+
+    //added new *******>>>>
+    //returns true/false for user whitelisted
+    public fun is_user_whitelisted<CoinType>(presale: &PresaleInfo<CoinType>, user_addr: address): bool {
+        vector::contains<address>(&presale.whitelist, &user_addr)
+    }
+
+    //returns amount of tokens reserved in the treasury for the presale
+    public fun get_presale_reserve<CoinType>(presale: &PresaleInfo<CoinType>): (u64, u64) {
+        (balance::value(&presale.coin_reserve), balance::value(&presale.sui_reserve))
+    }
+    
+
+    public fun get_user_info_by_address(user_claim: &WithdrawbleToken): (u64, u64) {
+        (user_claim.base_token_amount, user_claim.withdrawable_token_amount)
+    } 
+    //for init testing
+    #[test_only]
+    public fun init_for_testing(ctx: &mut TxContext) {
+        init(ctx)
+    }
 }
 
+#[test_only]
 module suipad::token_sale_test {
     use sui::sui::SUI;
-    use sui::coin::{mint_for_testing as mint, destroy_for_testing as burn};
-    use sui::test_scenario::{Self as test, Scenario, next_tx, ctx}
+    use std::vector;
+    use std::debug;
+    use sui::coin::{mint_for_testing as mint};
+    use sui::test_scenario::{Self, next_tx, ctx}
     ;
-    // use suipad::token_sale_v1::{Self, AdminCap, PresaleInfo, WithdrawbleToken};
+    use suipad::token_sale_v1::{Self, AdminCap, PresaleInfo, WithdrawbleToken};
+
+    //test token
+    struct BEEP {}
+
+    #[test]
+    fun test_create_presale() {
+        let owner = @0x1;
+        let user_2 = @0x2;
+        let user_3 = @0x3;
+        let scenario_val = test_scenario::begin(owner);
+        let scenario = &mut scenario_val;
+        test_scenario::next_tx(scenario, owner);
+        next_tx(scenario, owner);
+        {
+            token_sale_v1::init_for_testing(ctx(scenario));
+        };
+        next_tx(scenario, owner);
+        {
+            let capability = test_scenario::take_from_sender<AdminCap>(scenario);
+            token_sale_v1::create_presale<BEEP>(
+                &capability,
+                1000000,
+                3000000,
+                10000000,
+                100000000,
+                5000000,
+                1668322591,
+                1668325691,
+                1668329791,
+                true,
+                mint<BEEP>(100000000, ctx(scenario)),
+                ctx(scenario)
+            );
+            test_scenario::return_to_sender(scenario, capability);
+        };
+        next_tx(scenario, owner);
+        {
+
+            //checked all the velue
+            let presale_val = test_scenario::take_shared<PresaleInfo<BEEP>>(scenario);
+            let (min_spend, _, _, _, _, _) = token_sale_v1::get_presale_token_details<BEEP>(&presale_val);
+            assert!(min_spend == 1000000, 1);
+            let (coin_r, sui_r) = token_sale_v1::get_presale_reserve<BEEP>(&presale_val);
+            assert!(coin_r == 100000000, 3);
+            assert!(sui_r == 0, 2);
+            let ( _, _, _, status) = token_sale_v1::get_presale_time_details<BEEP>(&presale_val);
+            assert!(status == 1, 4);
+
+            //adding user to the whitelist
+            let v = vector::empty<address>();
+            vector::push_back(&mut v, user_2);
+            let capability = test_scenario::take_from_sender<AdminCap>(scenario);
+            token_sale_v1::add_to_whitelist(&capability, &mut presale_val, v, ctx(scenario));
+            token_sale_v1::change_sale_status(&capability, &mut presale_val, 2, ctx(scenario));
+            test_scenario::return_to_sender(scenario, capability);
+            test_scenario::return_shared(presale_val);
+        };
+        next_tx(scenario, user_2);
+        {
+            let presale_val = test_scenario::take_shared<PresaleInfo<BEEP>>(scenario);
+            let ( _, _, _, status) = token_sale_v1::get_presale_time_details<BEEP>(&presale_val);
+            assert!(status == 2, 4);
+            let is_white = token_sale_v1::is_user_whitelisted<BEEP>(&presale_val, user_2);
+            assert!(is_white, 5);
+            let is_white_3 = token_sale_v1::is_user_whitelisted<BEEP>(&presale_val, user_3);
+            assert!(!is_white_3, 6);
+            
+            token_sale_v1::user_deposit(
+                &mut presale_val,
+                mint<SUI>(1000000, ctx(scenario)),
+                ctx(scenario)
+            );
+
+            test_scenario::return_shared(presale_val);
+        };
+
+        next_tx(scenario, owner);
+        {
+            let capability = test_scenario::take_from_sender<AdminCap>(scenario);
+            let presale_val = test_scenario::take_shared<PresaleInfo<BEEP>>(scenario);
+            let (coin_r, sui_r) = token_sale_v1::get_presale_reserve<BEEP>(&presale_val);
+            assert!(coin_r == 100000000, 7);
+            assert!(sui_r == 1000000, 8);
+            token_sale_v1::change_sale_status(&capability, &mut presale_val, 3, ctx(scenario));
+            test_scenario::return_to_sender(scenario, capability);
+            test_scenario::return_shared(presale_val);
+        };
+
+        next_tx(scenario, user_2);
+        {
+            let presale_val = test_scenario::take_shared<PresaleInfo<BEEP>>(scenario);
+            let user_claim = test_scenario::take_from_sender<WithdrawbleToken>(scenario);
+            token_sale_v1::claim_token<BEEP>(&mut presale_val, user_claim, ctx(scenario));
+            // test_scenario::return_to_sender(scenario, user_claim);
+            test_scenario::return_shared(presale_val);
+        };
+
+        next_tx(scenario, user_2);
+        {
+            let presale_val = test_scenario::take_shared<PresaleInfo<BEEP>>(scenario);
+            let (coin_r, sui_r) = token_sale_v1::get_presale_reserve<BEEP>(&presale_val);
+            debug::print<u64>(&coin_r);
+            debug::print<u64>(&sui_r);
+            // let user_balance = test_scenario::take
+
+            test_scenario::return_shared(presale_val);
+        };
+        
+
+        test_scenario::end(scenario_val);
+    }
 }
