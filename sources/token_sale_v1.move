@@ -43,7 +43,7 @@ module suipad::token_sale_v1 {
         sale_start_ts: u64,
         sale_end_ts: u64,
         token_distribution_ts: u64,
-        sale_status: u64,                       //1=Upcoming, 2=Ongoing, 3=Closed, 4=Aborted/Forced Closed
+        sale_status: u64,                       //1=Upcoming, 2=Ongoing, 3=Closed, 4=claiming of tokens started, 5=Aborted/Forced Closed
         is_whitelist: bool,
         whitelist: vector<address>,
         participated: u64,
@@ -163,7 +163,7 @@ module suipad::token_sale_v1 {
 
 
     public entry fun claim_token<CoinType>(presale: &mut PresaleInfo<CoinType>, user_claim: WithdrawbleToken, ctx: &mut TxContext) {
-        assert!(presale.sale_status == 3 , ERR_PRESALE_IS_NOT_COMPLETED);
+        assert!(presale.sale_status == 4 , ERR_PRESALE_IS_NOT_COMPLETED);
         let user_addr = tx_context::sender(ctx);
         assert!(table::contains(&presale.user_map, user_addr), ERR_USER_CLAIMABLE_TOKEN_NOT_FOUND);
         let token = coin::take(&mut presale.coin_reserve, user_claim.withdrawable_token_amount, ctx);
