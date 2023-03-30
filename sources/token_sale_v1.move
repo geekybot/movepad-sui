@@ -1,12 +1,14 @@
 module suipad::token_sale_v1 {
     use sui::tx_context::{Self, TxContext};
     use std::vector;
+    use sui::event;
     use sui::object::{Self, UID, ID};
     use sui::sui::SUI;
     use sui::balance::{Self, Balance};
     use sui::transfer;
     use sui::coin::{Self, Coin};
     use sui::table::{Self, Table};
+    use sui::pay;
 
     
     const ERR_ONLY_ADMIN_CAN_CREATE_PRESALE: u64 = 1;
@@ -59,6 +61,9 @@ module suipad::token_sale_v1 {
         withdrawable_token_amount: u64
     }
 
+    struct NewUserEvent has copy, drop {
+        new_address: address
+    }
 
     fun init(ctx: &mut TxContext) {
         transfer::transfer(AdminCap {
@@ -107,12 +112,12 @@ module suipad::token_sale_v1 {
 
     }
 
-    public entry fun user_deposit<CoinType>(presale: &mut PresaleInfo<CoinType>, sui_input: Coin<SUI>, ctx: &mut TxContext) {
+    public entry fun user_deposit<CoinType>(presale: &mut PresaleInfo<CoinType>, sui_input_vector: vector<Coin<SUI>>, s_coins: u64, ctx: &mut TxContext) {
         assert!(presale.sale_status == 2, ERR_PRESALE_IS_NOT_ACTIVE);
         
         // assert!(timestamp::now_seconds() > presale.sale_start_ts , ERR_PRESALE_IS_NOT_ACTIVE);
         // assert!(timestamp::now_seconds() < presale.sale_end_ts, ERR_PRESALE_IS_NOT_ACTIVE);
-        let s_coins = coin::value(&sui_input);
+        let sui_input = extract_coin<SUI>(sui_input_vector, s_coins, ctx);
         let user_addr = tx_context::sender(ctx);
         assert!(!table::contains(&presale.user_map, user_addr), ERR_CALL_BUY_AGAIN_FUNCTION);
         assert!((presale.amount_to_be_raised - presale.amount_raised) >= s_coins, ERR_SALE_HARDCAP_REACHED);
@@ -136,14 +141,15 @@ module suipad::token_sale_v1 {
 
         presale.amount_raised = presale.amount_raised + s_coins;
         balance::join(&mut presale.sui_reserve,  coin::into_balance(sui_input));
+        event::emit( NewUserEvent { new_address: user_addr });
     }
 
-    public entry fun user_deposit_update<CoinType>(presale: &mut PresaleInfo<CoinType>, withdrawable: &mut WithdrawbleToken, sui_input: Coin<SUI>, ctx: &mut TxContext) {
+    public entry fun user_deposit_update<CoinType>(presale: &mut PresaleInfo<CoinType>, withdrawable: &mut WithdrawbleToken, sui_input_vector: vector<Coin<SUI>>, s_coins: u64, ctx: &mut TxContext) {
         assert!(presale.sale_status == 2, ERR_PRESALE_IS_NOT_ACTIVE);
         
         // assert!(timestamp::now_seconds() > presale.sale_start_ts , ERR_PRESALE_IS_NOT_ACTIVE);
         // assert!(timestamp::now_seconds() < presale.sale_end_ts, ERR_PRESALE_IS_NOT_ACTIVE);
-        let s_coins = coin::value(&sui_input);
+        let sui_input = extract_coin<SUI>(sui_input_vector, s_coins, ctx);
         let user_addr = tx_context::sender(ctx);
         assert!(table::contains(&presale.user_map, user_addr), ERR_CALL_BUY_AGAIN_FUNCTION);
         assert!((presale.amount_to_be_raised - presale.amount_raised) >= s_coins, ERR_SALE_HARDCAP_REACHED);
@@ -202,6 +208,22 @@ module suipad::token_sale_v1 {
         vector::append(&mut presale.whitelist, list);
     }
 
+    // internal helper functions
+    public fun extract_coin<CoinType>(
+        coins_input: vector<Coin<CoinType>>,
+        coin_amount: u64,
+        ctx: &mut TxContext
+        ): Coin<CoinType> {
+        let extracted_coin = coin::zero<CoinType>(ctx);
+        if (vector::is_empty(&coins_input)){
+            vector::destroy_empty(coins_input);
+            return extracted_coin
+        };
+        pay::join_vec(&mut extracted_coin, coins_input);
+        let extracted_coin_value = coin::value(&extracted_coin);
+        if (extracted_coin_value > coin_amount) pay::split_and_transfer(&mut extracted_coin, extracted_coin_value - coin_amount, tx_context::sender(ctx), ctx);
+        extracted_coin
+    }
     //getters
     // public fun profits(grocery: &Grocery): u64 {
     //     balance::value(&grocery.profits)
