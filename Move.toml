@@ -3,7 +3,9 @@ name = "suipad"
 version = "0.0.1"
 
 [dependencies]
-Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework", rev = "devnet" }
+MoveStdlib = { local = "/Users/utpal/Desktop/projects/sui/sui/crates/sui-framework/packages/move-stdlib/" }
+Sui = { local = "/Users/utpal/Desktop/projects/sui/sui/crates/sui-framework/packages/sui-framework" }
+
 
 [addresses]
 suipad =  "0x0"

@@ -177,18 +177,18 @@ module suipad::token_sale_v1 {
         //remove from table entry, consume the withdrawable object
         table::remove(&mut presale.user_map, user_addr);
         object::delete(id);
-        transfer::transfer(token, tx_context::sender(ctx));
+        transfer::public_transfer(token, tx_context::sender(ctx));
     }
 
     public entry fun admin_withdraw_from_presale<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, ctx: &mut TxContext) {
         assert!(presale.sale_status == 3 || presale.sale_status == 4 , ERR_PRESALE_IS_NOT_COMPLETED);
         let remaining_coin = balance::value(&presale.coin_reserve);
         let coins = coin::take(&mut presale.coin_reserve, remaining_coin, ctx);
-        transfer::transfer(coins, tx_context::sender(ctx));
+        transfer::public_transfer(coins, tx_context::sender(ctx));
 
         let remaining_sui = balance::value(&presale.sui_reserve);
         let sui_out = coin::take(&mut presale.sui_reserve, remaining_sui, ctx);
-        transfer::transfer(sui_out, tx_context::sender(ctx));
+        transfer::public_transfer(sui_out, tx_context::sender(ctx));
     }
 
     public entry fun change_sale_status<CoinType>(_: &AdminCap, presale: &mut PresaleInfo<CoinType>, status: u64, _ctx: &mut TxContext) {
